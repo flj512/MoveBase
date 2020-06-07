@@ -1,0 +1,27 @@
+1. SWD
+紫：TMS 白：GND 蓝：TCK
+
+2. UART
+蓝：GND 绿：TX 黄：RX
+		   coordinate
+		
+		X
+		^
+		|
+		|
+		|------->Y	
+		Vetical View
+		1--------0
+                |        |
+		|        |	
+		|        |
+		3--------2
+		Matrix
+
+1->postive  -1->negtive
+X: 1,1,1,1
+Y: -1,1,1,-1
+Z: 1,-1,1,-1 
+
+
+
