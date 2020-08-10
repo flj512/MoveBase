@@ -2,7 +2,7 @@
 紫：TMS 白：GND 蓝：TCK
 
 2. UART
-蓝：GND 绿：TX 黄：RX
+白：GND 绿：TX 棕：RX
 		   coordinate
 		
 		X

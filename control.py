@@ -83,7 +83,7 @@ def readchar():
 
 
 def keyborad_ctl():
-    speed=1.0
+    speed=2.0
     try:
         while True:
             c=readchar()
