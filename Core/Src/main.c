@@ -56,6 +56,8 @@ UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN PV */
 static int errCode=0;
+static int lastSpeed=-1;
+static int lastDir[4];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -69,6 +71,12 @@ static void MX_TIM14_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+static void coarse_delay_ms(int ms) {
+	volatile int i, j;
+	for (i = 0; i < ms; i++)
+		for (j = 0; j < 500; j++)
+			;
+}
 static void setMotorSpeed(int speed) {
 	TIM_OC_InitTypeDef sConfigOC = {0};
 
@@ -87,6 +95,7 @@ static void setMotorSpeed(int speed) {
 		}
 		HAL_TIM_PWM_Start(&htim14, TIM_CHANNEL_1);
 	}
+	lastSpeed=speed;
 }
 struct MotorCfg {
 	uint16_t port1;
@@ -111,15 +120,17 @@ static void setMotorPar(int idx, int dir) {
 	static struct MotorCtl ctl[] = {
 			{ GPIO_PIN_RESET, GPIO_PIN_SET },
 			{ GPIO_PIN_SET, GPIO_PIN_RESET },
-			{ GPIO_PIN_SET, GPIO_PIN_SET }
+			{ GPIO_PIN_RESET, GPIO_PIN_RESET }
 	};
 	HAL_GPIO_WritePin(GPIOA, cfg[idx].port1, ctl[dir].value1);
 	HAL_GPIO_WritePin(GPIOA, cfg[idx].port2, ctl[dir].value2);
+	lastDir[idx]=dir;
 }
 static void stopMotor()
 {
 	int i;
 	setMotorSpeed(0);
+	coarse_delay_ms(50);
 	for(i=0;i<4;i++){
 		setMotorPar(i, DIR_STOP);
 	}
@@ -149,10 +160,20 @@ static int getCmd(char *cmd, int *size) {
 	*size=i;
 	return 0;
 }
+static int getDir(char d)
+{
+	if(d=='0'){
+		return DIR_POS;
+	}else if(d=='1'){
+		return DIR_NEG;
+	}else{
+		return DIR_STOP;
+	}
+}
 //"OFF",stop motor
 //S[speed]D[dir0]D[dir1]D[dir2]D[dir3] -> "S100D0D0D0D0",0->DIR_POS,1->DIR_NEG
 static void processCmd(char *cmd, int endIdx) {
-	int i,speed;
+	int i,speed,changed;
 	char d[4];
 	cmd[endIdx] = '\0';
 	DEBUG_INFO("Receive command:%s\r\n",cmd);
@@ -164,14 +185,32 @@ static void processCmd(char *cmd, int endIdx) {
 			goto invalid_cmd;
 		}
 		for(i=0;i<4;i++){
-			if(d[i]!='0'&&d[i]!='1'){
+			if(d[i]!='0'&&d[i]!='1'&&d[i]!='2'){
 				goto invalid_cmd;
 			}
 		}
-		setMotorSpeed(speed);
-		for(i=0;i<4;i++){
-			setMotorPar(i, d[i]=='0'?DIR_POS:DIR_NEG);
+		changed=0;
+		if(lastSpeed<0||lastSpeed!=speed){
+			changed=1;
+		}else{
+			for(i=0;i<4;i++){
+				if(getDir(d[i])!=lastDir[i]){
+					changed=1;
+					break;
+				}
+			}
 		}
+		if(!changed){
+			DEBUG_INFO("not change,unset\r\n");
+			return;
+		}
+		setMotorSpeed(0);
+		coarse_delay_ms(20);
+		for(i=0;i<4;i++){
+			setMotorPar(i, getDir(d[i]));
+		}
+		coarse_delay_ms(20);
+		setMotorSpeed(speed);
 		return;
 	}
 invalid_cmd:
@@ -186,7 +225,7 @@ static void motorLoop() {
 		size=ARRAY_SIZE(cmd);
 		ret = getCmd(cmd, &size);
 		if(ret<0){
-			DEBUG_INFO("receive error =%d，size=%d \r\n",errCode,size);
+			DEBUG_INFO("receive error, reason=%d，size=%d \r\n",errCode,size);
 			stopMotor(0);
 			continue;
 		}
@@ -198,12 +237,6 @@ static void motorLoop() {
 	}
 }
 #ifdef DEBUG
-static void coarse_delay_ms(int ms) {
-	int i, j;
-	for (i = 0; i < ms; i++)
-		for (j = 0; j < 500; j++)
-			;
-}
 static void testLoop()
 {
 	int idx=0;
